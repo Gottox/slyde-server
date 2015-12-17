@@ -1,0 +1,129 @@
+window.slyde = window.slyde || (function(d,b) {
+	var URL = "ws://<%- hostname %>/";
+	var error_icon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAeCAYAAAAYa/93AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3wwQFDIP3LX8iAAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAAASUlEQVQ4y2NggIFp//8zTPv/nwEdoIkzMZAIhoMG2gNGrGFPTT+wwFlZjIx4VUJdMiJjejhooH1aoieY9v8vw7T/fwmJj8iYBgBcEhzxjHf5nQAAAABJRU5ErkJggg==";
+
+	function RevealBind(cb) {
+		Reveal.addEventListener('slidechanged', cb);
+	}
+	RevealBind.prototype.next = function() { Reveal.next() };
+	RevealBind.prototype.prev = function() { Reveal.prev() };
+	RevealBind.prototype.info = function() {
+		var future = document.querySelector('section.future')
+		return {
+			SlySlideCount: 1000,
+			SlySlideNmbr: ~~(Reveal.getProgress()*1000),
+			SlySlideTitle: future ? future.textContent.split('\n',2)[0] : ""
+		}
+	};
+
+	function PdfJsBind(cb) {
+		var p = d.getElementById('pageNumber').value;
+		this.interval = setInterval(function() {
+			var t = d.getElementById('pageNumber').value;
+			if(t != p) cb();
+				p = t;
+		}, 1000);
+	}
+	PdfJsBind.prototype.next = function() { d.getElementById('next').click() };
+	PdfJsBind.prototype.prev = function() { d.getElementById('previous').click() };
+	PdfJsBind.prototype.info = function() {
+		return {
+			SlySlideCount: +d.getElementById('numPages').textContent.replace(/[^0-9]/g,""),
+			SlySlideNmbr: +d.getElementById('pageNumber').value
+		}
+	};
+
+	function findBind(cb) {
+		if(window.Reveal)
+			return new RevealBind(cb);
+		else(window.PDFJS)
+			return new PdfJsBind(cb);
+	}
+
+	function overlay(msg) {
+		var e = d.createElement("form"), s = e.style;
+		s.position = "fixed";
+		s.zIndex = "1";
+		s.backgroundColor = "rgba(0,0,0,0.8)";
+		s.left=e.style.right=e.style.top=e.style.bottom="0";
+		s.display="flex";
+		s.flexFlow="column";
+		s.margin="auto";
+		s.fontFamily="sans-serif";
+		s.justifyContent=e.style.alignItems="center";
+		e.innerHTML=(msg ? "<div style='color:red; margin:20px'>"+msg+"</div>" : "")+
+			"<input name='p' type='password' size='20' maxlength='4' style='"+
+				"text-align: center;"+
+				"background: white;"+
+				"color: black;"+
+				"border: none;"+
+				"padding: 10px;"+
+				"border-radius: 20px;"+
+				"box-shadow:inset 3px 3px 10px 0px #333;"+
+			"' placeholder='Slyde Token'><br>"+
+			"<a style='"+
+				"margin-top: 20px;"+
+				"font-size: small;"+
+				"color: #ccf;"+
+			"' href='http://slyde.tox.ninja'>more infos</a>";
+		e.onsubmit=e.elements.p.onkeypress=e.onclick=function(ev) {
+			if(ev.type == "submit") {
+				b.removeChild(e);
+				return !!connect(this.elements.p.value);
+			}
+			if(ev.key == "Escape" || ev.target == e) {
+				b.removeChild(e);
+				return !!icon();
+			}
+		}
+		b.appendChild(e);
+		e.elements.p.focus();
+	}
+
+	function icon(err) {
+		var e = d.createElement("a"), s = e.style;
+		e.title = err || "Connect";
+		e.onclick = function() { overlay(err); b.removeChild(e); };
+		s.position='fixed';
+		s.left=s.bottom="0";
+		s.width=s.height="32px";
+		s.background="url("+error_icon+") no-repeat center center";
+		s.color="red";
+		s.cursor="pointer";
+		s.textAlign="right";
+		s.padding="10px";
+		e.innerHTML=err?"&#10007;":"";
+		b.appendChild(e);
+	}
+
+	function connect(token) {
+		var ws = new WebSocket(URL + token, "display");
+		function updateinfo() {
+			ws.send(ws.send(JSON.stringify(bind.info())));
+		};
+
+		var bind = findBind(updateinfo);
+		ws.onopen = function() {
+			updateinfo();
+			ws.onmessage = function(ev) {
+				var msg = JSON.parse(ev.data);
+				if(msg.SlyError) {
+					ws.onclose=ws.onerror=null;
+					return overlay(msg.SlyError);
+				}
+				switch(msg.SlyCmd) {
+					case "left": bind.prev(); break;
+					case "right": bind.next(); break;
+				}
+			};
+			ws.onclose=ws.onerror=function() { icon("Connection lost");ws.onclose=ws.onerror=null;}
+		}
+		ws.onerror = function() { overlay("Error while connecting");ws.onerror=null}
+	}
+<% if(token) { %>
+	connect("<%= token %>");
+<% } else { %>
+	overlay();
+<% } %>
+	return true;
+})(document,document.body);

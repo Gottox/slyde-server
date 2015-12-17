@@ -8,9 +8,13 @@ var http = require('http');
 var url = require('url');
 var WebSocketServer = require('ws').Server;
 var generatePassword = require("password-maker");
+var UglifyJS = require("uglify-js");
+var ejs = require('ejs');
+var async = require('async');
 
 var routes = require('./routes/index');
 var users = require('./routes/users');
+var javascript = require('./routes/javascript');
 
 var app = express();
 
@@ -29,7 +33,13 @@ app.use(require('less-middleware')(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/', routes);
-app.use('/users', users);
+app.engine('js-ejs', function(path, options, callback) {
+	async.waterfall([
+		cb => ejs.renderFile(path, options, cb),
+		(result, cb) => cb(null, UglifyJS.minify(result, {fromString:true}).code),
+	], callback);
+});
+
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

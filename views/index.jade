@@ -3,3 +3,9 @@ extends layout
 block content
   h1= title
   p Welcome to #{title}
+  style
+    |#bookmarklet:after {
+    |  content: "Bookmarklet";
+    |}
+  a#bookmarklet(href="javascript:(function(){document.body.appendChild(document.createElement('script')).src='http://"+hostname+"/slyde.js';})();", onclick="return false;")
+    span(style={display:'none'}) Slyde
