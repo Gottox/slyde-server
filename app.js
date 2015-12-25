@@ -11,6 +11,8 @@ var generatePassword = require("password-maker");
 var UglifyJS = require("uglify-js");
 var ejs = require('ejs');
 var async = require('async');
+var debug = require('debug')('slyde');
+
 
 var routes = require('./routes/index');
 var users = require('./routes/users');
@@ -84,22 +86,29 @@ wss.on('connection', function(ws) {
 		} while(token in waiting);
 		ws.send(JSON.stringify({SlyToken: token}));
 		waiting[token] = ws;
+		debug("new pebble registered. %s", token);
 
-		ws.on('close', function() {
+		var end = function() {
 			delete waiting[token];
-		});
+			debug("%s: close", token);
+		};
+		ws.on('close', end);
+		ws.on('error', end);
 	} else if(ws.protocol === 'display') {
 		var location = url.parse(ws.upgradeReq.url, true);
 		token = location.pathname.substr(1);
 		console.log(token, Object.keys(waiting));
+		debug('new slave connection. wanting %s', token)
 		if(!(token in waiting)) {
 			console.log("no such slide");
 			ws.send(JSON.stringify({SlyError: "No Such Slide"}))
+			debug('slave %s: No such slide', token);
 			return ws.close();
 		}
 		pebble = waiting[token];
 		delete waiting[token];
 		pebble.send(JSON.stringify({SlyConnected: 1}));
+
 		pebble.on("message", function(data) {
 			ws.send(data);
 		});
@@ -110,8 +119,9 @@ wss.on('connection', function(ws) {
 			ws.close();
 		});
 		ws.on("close", function() {
-			pebble.send(JSON.stringify({SlyConnected: 0}));
-			waiting[token] = pebble;
+			try {
+				pebble.close();
+			} catch (e) {}
 		});
 	}
 });
